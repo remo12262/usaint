@@ -44,7 +44,6 @@ export default function App() {
   const canvasRef = useRef(null)
   const [nodes, setNodes] = useState([])
   const [edges, setEdges] = useState([])
-  const [predictions, setPredictions] = useState([])
   const [hiddenNets, setHiddenNets] = useState([])
   const [alerts, setAlerts] = useState([])
   const [stats, setStats] = useState({})
@@ -52,6 +51,7 @@ export default function App() {
   const [nodeDetails, setNodeDetails] = useState(null)
   const [tab, setTab] = useState("graph")
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [search, setSearch] = useState("")
   const [showHidden, setShowHidden] = useState(false)
 
@@ -64,22 +64,30 @@ export default function App() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [gRes, pRes, hnRes, aRes, sRes] = await Promise.all([
+      const [gRes, hnRes, aRes, sRes] = await Promise.all([
         fetch(`${API}/api/graph`),
-        fetch(`${API}/api/influence-ranking`),
         fetch(`${API}/api/hidden-networks`),
         fetch(`${API}/api/alerts`),
         fetch(`${API}/api/stats`),
       ])
       const g = await gRes.json()
+      const alertsData = await aRes.json() || []
       setNodes(g.nodes||[]); setEdges(g.edges||[])
-      setPredictions(await pRes.json()||[])
       setHiddenNets(await hnRes.json()||[])
-      setAlerts(await aRes.json()||[])
+      setAlerts(alertsData)
       setStats(await sRes.json()||{})
       setLoading(false)
     } catch(e) { console.error(e); setLoading(false) }
   }, [])
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await fetch(`${API}/api/refresh`, {method:"POST"})
+      setTimeout(fetchData, 8000)
+      setTimeout(()=>{ fetchData(); setRefreshing(false) }, 15000)
+    } catch(e) { setRefreshing(false) }
+  }, [fetchData])
 
   useEffect(()=>{ fetchData() },[fetchData])
 
@@ -144,14 +152,12 @@ export default function App() {
       function draw(){
         ctx.clearRect(0,0,canvas.width,canvas.height)
         const sel=selected
-
         visibleEdges.forEach(e=>{
           const ps=posRef.current[e.source],pt=posRef.current[e.target]
           if(!ps||!pt) return
           const isHl=sel&&(e.source===sel||e.target===sel)
           const edgeColor=EDGE_COLORS[e.type]||(e.hidden_score>60?"#E24B4A":"#888")
           const isDashed=e.type==="RETE_INFORMALE"||e.type==="FINANZIA_OCCULTO"
-
           ctx.save()
           ctx.beginPath()
           ctx.moveTo(ps.x,ps.y); ctx.lineTo(pt.x,pt.y)
@@ -160,7 +166,6 @@ export default function App() {
           ctx.lineWidth=isHl?2:0.8
           ctx.stroke()
           ctx.setLineDash([])
-
           if(isHl){
             const mx=(ps.x+pt.x)/2,my=(ps.y+pt.y)/2
             const angle=Math.atan2(pt.y-ps.y,pt.x-ps.x)
@@ -174,7 +179,6 @@ export default function App() {
           }
           ctx.restore()
         })
-
         nodes.forEach(n=>{
           const p=posRef.current[n.id]; if(!p) return
           const color=NODE_COLORS[n.type]||"#888"
@@ -183,7 +187,6 @@ export default function App() {
           const isConn=sel&&visibleEdges.some(e=>(e.source===sel&&e.target===n.id)||(e.target===sel&&e.source===n.id))
           const alpha=sel&&!isSel&&!isConn?.2:1
           const r=isSel?15:isHov?13:Math.max(7,Math.min(13,(n.influence_score||0)/8))
-
           ctx.save()
           ctx.globalAlpha=alpha
           if(n.hidden_score>50){
@@ -276,7 +279,6 @@ export default function App() {
 
   return (
     <div style={{fontFamily:"var(--font-sans,sans-serif)",color:"var(--color-text-primary)",minHeight:"100vh",background:"var(--color-background-tertiary)"}}>
-      {/* Header */}
       <div style={{background:"var(--color-background-primary)",borderBottom:"0.5px solid var(--color-border-tertiary)",padding:"10px 20px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <div style={{width:8,height:8,borderRadius:"50%",background:"#E8772E"}}/>
@@ -292,18 +294,18 @@ export default function App() {
         <div style={{display:"flex",gap:8,alignItems:"center",fontSize:11,color:"var(--color-text-tertiary)"}}>
           {stats.unread_alerts>0&&<span style={{background:"#E24B4A",color:"#fff",borderRadius:10,padding:"2px 7px"}}>{stats.unread_alerts} alert</span>}
           <span>{stats.nodes} nodi · {stats.edges} relazioni · {stats.predictions||0} previsioni</span>
-          <button onClick={()=>fetch(`${API}/api/refresh`,{method:"POST"}).then(()=>setTimeout(fetchData,3000))} style={{padding:"3px 10px",borderRadius:5,border:"0.5px solid var(--color-border-secondary)",background:"var(--color-background-secondary)",cursor:"pointer",fontSize:11,color:"var(--color-text-secondary)"}}>↻</button>
+          <button onClick={handleRefresh} disabled={refreshing} style={{padding:"3px 10px",borderRadius:5,border:"0.5px solid var(--color-border-secondary)",background:refreshing?"#EF9F2722":"var(--color-background-secondary)",cursor:refreshing?"not-allowed":"pointer",fontSize:11,color:refreshing?"#EF9F27":"var(--color-text-secondary)"}}>
+            {refreshing?"⏳ Aggiornamento...":"↻ Aggiorna"}
+          </button>
         </div>
       </div>
 
       {loading&&<div style={{padding:40,textAlign:"center",color:"var(--color-text-secondary)"}}>Caricamento grafo politico...</div>}
 
-      {/* GRAPH TAB */}
       {!loading&&tab==="graph"&&(
         <div style={{display:"flex"}}>
           <div style={{flex:1,position:"relative"}}>
             <div style={{position:"absolute",top:10,left:10,zIndex:10,display:"flex",gap:8,alignItems:"center"}}>
-              {/* Legend compact */}
               <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8,padding:"6px 10px",display:"flex",flexWrap:"wrap",gap:"4px 10px",maxWidth:360}}>
                 {Object.entries(NODE_COLORS).map(([t,c])=>(
                   <div key={t} style={{display:"flex",alignItems:"center",gap:3,fontSize:10,color:"var(--color-text-secondary)"}}>
@@ -320,7 +322,6 @@ export default function App() {
               onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
               onMouseLeave={()=>{dragRef.current=null;hovRef.current=null}}/>
           </div>
-          {/* Side panel */}
           <div style={{width:250,borderLeft:"0.5px solid var(--color-border-tertiary)",background:"var(--color-background-primary)",padding:14,overflowY:"auto",maxHeight:520}}>
             {!nodeDetails&&<p style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Clicca un nodo per dettagli</p>}
             {nodeDetails&&(
@@ -358,12 +359,11 @@ export default function App() {
         </div>
       )}
 
-      {/* PREDICTIONS TAB */}
       {!loading&&tab==="predictions"&&(
         <div style={{padding:20,maxWidth:820}}>
           <h2 style={{fontSize:15,fontWeight:500,marginBottom:4}}>Previsioni predittive</h2>
-          <p style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:16}}>Generate da Claude AI analizzando le reti di influenza del grafo. Aggiornate ogni 6 ore.</p>
-          {alerts.filter(a=>a.confidence>0).length===0&&<p style={{color:"var(--color-text-tertiary)",fontSize:13}}>Nessuna previsione disponibile. Clicca ↻ per generare.</p>}
+          <p style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:16}}>Generate da Claude AI analizzando le reti di influenza del grafo. Clicca ↻ Aggiorna per rigenerare.</p>
+          {alerts.filter(a=>a.confidence>0).length===0&&<p style={{color:"var(--color-text-tertiary)",fontSize:13}}>Nessuna previsione disponibile. Clicca ↻ Aggiorna per generare.</p>}
           {alerts.filter(a=>a.confidence>0).map((a,i)=>(
             <div key={i} style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderLeft:`3px solid ${SEV_COLOR[a.severity]||"#888"}`,borderRadius:8,padding:"14px 16px",marginBottom:12}}>
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
@@ -387,12 +387,11 @@ export default function App() {
         </div>
       )}
 
-      {/* HIDDEN NETWORKS TAB */}
       {!loading&&tab==="hidden"&&(
         <div style={{padding:20,maxWidth:820}}>
           <h2 style={{fontSize:15,fontWeight:500,marginBottom:4}}>Reti di influenza nascoste</h2>
           <p style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:16}}>Cluster di influenza non trasparente identificati da Claude AI sul grafo delle relazioni.</p>
-          {hiddenNets.length===0&&<p style={{color:"var(--color-text-tertiary)",fontSize:13}}>Nessuna rete nascosta rilevata ancora. Clicca ↻ per analizzare.</p>}
+          {hiddenNets.length===0&&<p style={{color:"var(--color-text-tertiary)",fontSize:13}}>Nessuna rete nascosta rilevata ancora. Clicca ↻ Aggiorna per analizzare.</p>}
           {hiddenNets.map((hn,i)=>(
             <div key={i} style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:8,padding:"14px 16px",marginBottom:12}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
@@ -415,7 +414,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ALERTS TAB */}
       {!loading&&tab==="alerts"&&(
         <div style={{padding:20,maxWidth:820}}>
           <h2 style={{fontSize:15,fontWeight:500,marginBottom:16}}>Alert politici ({alerts.length})</h2>
@@ -433,7 +431,6 @@ export default function App() {
         </div>
       )}
 
-      {/* RANKING TAB */}
       {!loading&&tab==="ranking"&&(
         <div style={{padding:20,maxWidth:720}}>
           <h2 style={{fontSize:15,fontWeight:500,marginBottom:4}}>Ranking influenza</h2>
