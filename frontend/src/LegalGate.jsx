@@ -1,23 +1,19 @@
 import { useState, useEffect } from "react";
 
 /*
-  LegalGate — password d'accesso + banner di metodo + accettazione Termini.
+  LegalGate — password d'accesso + presentazione + accettazione Termini + banner.
   Uso:
-      <LegalGate appName="POLINT">
+      <LegalGate appName="POLINT" description="testo di presentazione...">
         <App />
       </LegalGate>
-  Per USAint cambia solo appName="USAint".
+  Per USAint cambia appName e description.
 
-  PASSWORD: NON va scritta qui. Si imposta come variabile d'ambiente su Render
-  con nome  VITE_ACCESS_PASSWORD  (vedi istruzioni). Se la variabile non e'
-  impostata, lo step password viene saltato.
-
-  NOTA DI SICUREZZA: una password lato frontend e' un filtro/deterrente, non una
-  protezione forte (e' visibile a chi ispeziona il codice). Per un accesso davvero
-  blindato serve un controllo lato server o un servizio come Cloudflare Access.
+  PASSWORD: si imposta come variabile d'ambiente su Render -> VITE_ACCESS_PASSWORD.
+  Se non e' impostata, lo step password viene saltato.
+  NOTA: password lato frontend = filtro/deterrente, non protezione forte.
 */
 
-export default function LegalGate({ appName = "POLINT", children }) {
+export default function LegalGate({ appName = "POLINT", description = "", children }) {
   const ACCEPT_KEY = `legal_accepted_${appName}`;
   const UNLOCK_KEY = `unlocked_${appName}`;
   const PASSWORD = import.meta.env.VITE_ACCESS_PASSWORD || "";
@@ -77,14 +73,16 @@ export default function LegalGate({ appName = "POLINT", children }) {
     background: "#0E1426", color: "#E7ECF6", border: "1px solid #1E2942", marginTop: 6,
   };
   const link = { color: "#8B7FD6", cursor: "pointer", textDecoration: "underline" };
+  const desc = { color: "#B9C2D6", fontSize: 14.5, marginTop: 4, marginBottom: 22, lineHeight: 1.6 };
 
-  // STEP 1 — password
+  // STEP 1 — password + presentazione
   if (!unlocked) {
     return (
       <div style={overlay}>
         <div style={box}>
-          <h2 style={{ marginTop: 0, fontSize: "1.25rem" }}>{appName} — accesso riservato</h2>
-          <p style={{ color: "#8A96B2" }}>Inserisci la password per accedere.</p>
+          <h2 style={{ marginTop: 0, fontSize: "1.35rem" }}>{appName}</h2>
+          {description && <p style={desc}>{description}</p>}
+          <p style={{ color: "#8A96B2", marginBottom: 0 }}>Accesso riservato — inserisci la password.</p>
           <input
             type="password" style={input} value={pw} autoFocus
             onChange={(e) => { setPw(e.target.value); setError(false); }}
@@ -162,7 +160,7 @@ function TermsModal({ appName, onClose, box, overlay }) {
         <p>
           Sono trattati dati di figure pubbliche relativi alla loro attivita' pubblica, da
           fonti accessibili al pubblico. Base giuridica: interesse pubblico all'informazione
-          e dati resi pubblici dall'interessato. Diritti e segnalazioni:  remo.pulcini@libero.it
+          e dati resi pubblici dall'interessato. Diritti e segnalazioni: remo.pulcini@libero.it.
         </p>
       </div>
     </div>
