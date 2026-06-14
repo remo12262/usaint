@@ -178,7 +178,7 @@ class InfluenceExtractor:
             return {"entities": [], "relations": []}
         try:
             msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=2000,
                 system=SYSTEM_PROMPT,
                 tools=[{"type": "web_search_20250305", "name": "web_search"}],
@@ -246,7 +246,7 @@ class InfluenceExtractor:
         }, indent=2, ensure_ascii=False)
         try:
             msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=2500,
                 messages=[{"role": "user", "content": PREDICT_PROMPT.format(graph_data=graph_data)}]
             )
@@ -265,7 +265,7 @@ class InfluenceExtractor:
             hidden_nodes = nodes[:10]
         try:
             msg = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=2000,
                 messages=[{"role": "user", "content": HIDDEN_NETWORKS_PROMPT.format(
                     entities=json.dumps(hidden_nodes, ensure_ascii=False),
